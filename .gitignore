@@ -4,5 +4,4 @@
 /doc/
 erl_crash.dump
 *.ez
-/priv/mob_plugin.sig
 mob.exs
