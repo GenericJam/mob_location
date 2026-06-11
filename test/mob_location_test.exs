@@ -1,0 +1,80 @@
+defmodule MobLocationTest do
+  use ExUnit.Case, async: true
+
+  alias MobDev.Plugin.{Manifest, Validator}
+
+  @plugin_dir Path.expand("..", __DIR__)
+
+  describe "plugin manifest" do
+    setup do
+      {:ok, manifest} = Manifest.load(@plugin_dir)
+      %{manifest: manifest}
+    end
+
+    test "loads and validates clean (round-trips)", %{manifest: m} do
+      assert {:ok, ^m} = Manifest.validate(m)
+    end
+
+    test "classifies as tier 1 (NIF plugin)", %{manifest: m} do
+      assert Manifest.tier(m) == 1
+    end
+
+    test "passes the full pre-publish validator (paths, NIF modules, permissions)",
+         %{manifest: m} do
+      assert %{errors: []} = Validator.validate_plugin(m, @plugin_dir)
+    end
+
+    test "declares the cross-platform NIF pattern: one module, both platforms",
+         %{manifest: m} do
+      assert [ios, android] = m.nifs
+      assert ios.module == :mob_location_nif and ios.platform == :ios and ios.lang == :objc
+      assert android.module == :mob_location_nif and android.platform == :android
+      assert android.lang == :zig
+    end
+
+    test "owns the :location capability with the iOS self-registered handler",
+         %{manifest: m} do
+      assert [%{capability: :location, ios: %{handler: "mob_location_request_permission"}}] =
+               m.permissions
+    end
+
+    test "every native source dir + Kotlin bridge the manifest references exists",
+         %{manifest: m} do
+      for %{native_dir: dir} <- m.nifs do
+        assert File.dir?(Path.join(@plugin_dir, dir)), "missing #{dir}"
+      end
+
+      assert File.exists?(Path.join(@plugin_dir, m.android.bridge_kt))
+    end
+  end
+
+  describe "NIF stub agreement" do
+    test "the manifest NIF module is the shipped .erl stub and loads on the host" do
+      assert Code.ensure_loaded?(:mob_location_nif)
+    end
+
+    test "every NIF the public API calls is exported by the stub at the right arity" do
+      exports = :mob_location_nif.module_info(:exports)
+
+      for fa <- [location_get_once: 0, location_start: 1, location_stop: 0] do
+        assert fa in exports, "#{inspect(fa)} missing from mob_location_nif exports"
+      end
+    end
+
+    test "host (no native linked) falls back to nif_not_loaded, not a load crash" do
+      assert_raise ErlangError, ~r/nif_not_loaded/, fn ->
+        :mob_location_nif.location_stop()
+      end
+    end
+  end
+
+  describe "public API surface (extraction parity with old Mob.Location)" do
+    test "exports the extracted surface" do
+      exports = MobLocation.__info__(:functions)
+
+      for fa <- [get_once: 1, start: 2, stop: 1] do
+        assert fa in exports, "#{inspect(fa)} missing from MobLocation"
+      end
+    end
+  end
+end
