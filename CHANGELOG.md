@@ -6,6 +6,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
+## [0.1.2] - 2026-06-15
+
+### Fixed
+- Removed a stale `priv/mob_plugin.sig` / `mob_plugin.pub` that shipped in 0.1.1.
+  It was signed before the 0.1.1 manifest gained `:screens`, so the signature no
+  longer matched the manifest and the plugin signature gate hard-failed
+  (`invalid_signature`, not bypassable by `acknowledge_unsafe_plugins`). Now
+  unsigned, consistent with the other first-party capability plugins.
+
 ## [0.1.1] - 2026-06-15
 
 ### Added
