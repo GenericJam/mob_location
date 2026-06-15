@@ -6,7 +6,7 @@ defmodule MobLocation.MixProject do
   def project do
     [
       app: :mob_location,
-      version: "0.1.0",
+      version: "0.1.1",
       elixir: "~> 1.17",
       deps: deps(),
       description: "Device location (GPS/network) for Mob apps (extracted from mob core)",

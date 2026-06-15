@@ -3,6 +3,12 @@
   mob_version: "~> 0.6",
   plugin_spec_version: 1,
   description: "Device location (GPS/network) — extracted from mob core in Wave 2",
+  # A sample screen the host can navigate to by route (auto-listed by a home
+  # that enumerates Mob.Plugins.screens/0). Pure-Elixir + hot-pushable; drop it
+  # and this entry in a real app that builds its own UI.
+  screens: [
+    %{module: MobLocation.DemoScreen, default_route: "/mob_location/demo"}
+  ],
   nifs: [
     # iOS: Objective-C NIF driving CLLocationManager. lang: :objc -> compiled as
     # ObjC (.m) with -fobjc-arc; platform: :ios so it isn't pulled into the
