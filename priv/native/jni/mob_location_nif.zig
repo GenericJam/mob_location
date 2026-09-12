@@ -33,12 +33,26 @@ var g_loc: LocMethods = .{};
 var g_loc_cls: jni.JClass = null;
 
 // ── nativeRegister thunk — cache the bridge jclass + method ids ───────────
+// A missing method leaves a `NoSuchMethodError` pending on the JNIEnv;
+// `cacheMethod` clears it so subsequent lookups aren't shadowed by a stale
+// pending exception. See MOB-77.
+inline fn cacheMethod(
+    jenv: *jni.JNIEnv,
+    cls: jni.JClass,
+    name: [*:0]const u8,
+    sig: [*:0]const u8,
+) jni.JMethodID {
+    const m = jni.getStaticMethodID(jenv, cls, name, sig);
+    if (m == null) jni.exceptionClear(jenv);
+    return m;
+}
+
 export fn Java_io_mob_location_MobLocationBridge_nativeRegister(jenv: *jni.JNIEnv, cls: jni.JClass) callconv(.c) void {
     g_loc_cls = jni.newGlobalRef(jenv, cls);
     if (g_loc_cls == null) return;
-    g_loc.get_once = jni.getStaticMethodID(jenv, cls, "location_get_once", "(JLjava/lang/String;)V");
-    g_loc.start = jni.getStaticMethodID(jenv, cls, "location_start", "(JLjava/lang/String;)V");
-    g_loc.stop = jni.getStaticMethodID(jenv, cls, "location_stop", "()V");
+    g_loc.get_once = cacheMethod(jenv, cls, "location_get_once", "(JLjava/lang/String;)V");
+    g_loc.start = cacheMethod(jenv, cls, "location_start", "(JLjava/lang/String;)V");
+    g_loc.stop = cacheMethod(jenv, cls, "location_stop", "()V");
 }
 
 // ── Thread-attach + pid round-trip helpers (mirror mob-core / bt) ─────────
@@ -66,10 +80,15 @@ inline fn pidFromLong(jpid: jni.JLong) erts.ErlNifPid {
 /// Call `MobLocationBridge.<method>(pid_long, arg)` — async; the fix lands later
 /// via the nativeDeliverLocation thunk. Returns :ok unconditionally.
 fn callBridgePidStr(env: ?*erts.ErlNifEnv, method: jni.JMethodID, pid: erts.ErlNifPid, arg: ?[*:0]const u8) erts.ERL_NIF_TERM {
+    if (g_loc_cls == null or method == null) return erts.ok(env);
     var attached: c_int = 0;
-    const jenv = get_jenv(&attached) orelse return erts.atom(env, "error");
+    const jenv = get_jenv(&attached) orelse return erts.ok(env);
     const jarg: jni.JString = if (arg) |a| jni.newStringUTF(jenv, a) else null;
     jenv.*.CallStaticVoidMethod.?(jenv, g_loc_cls, method, pidToJlong(pid), jarg);
+    // Kotlin bridge methods can throw SecurityException on missing
+    // ACCESS_FINE_LOCATION/ACCESS_COARSE_LOCATION grants. MOB-77: clear here so
+    // a pending exception cannot leak to the next JNI call on this thread.
+    jni.exceptionClear(jenv);
     if (jarg != null) jni.deleteLocalRef(jenv, jarg);
     detachIfAttached(attached);
     return erts.ok(env);
@@ -149,9 +168,11 @@ fn nif_location_stop(
 ) callconv(.c) erts.ERL_NIF_TERM {
     _ = argc;
     _ = argv;
+    if (g_loc_cls == null or g_loc.stop == null) return erts.ok(env);
     var attached: c_int = 0;
-    const jenv = get_jenv(&attached) orelse return erts.atom(env, "error");
+    const jenv = get_jenv(&attached) orelse return erts.ok(env);
     jenv.*.CallStaticVoidMethod.?(jenv, g_loc_cls, g_loc.stop);
+    jni.exceptionClear(jenv);
     detachIfAttached(attached);
     return erts.ok(env);
 }

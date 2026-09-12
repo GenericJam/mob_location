@@ -6,6 +6,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Android: JNI exception no longer leaks onto the BEAM scheduler thread**
+  (MOB-77). The zig NIF had zero `ExceptionCheck`/`ExceptionClear` calls,
+  and the runtime NIFs didn't guard on a missing bridge cache — a
+  `SecurityException` from a missing `ACCESS_FINE_LOCATION`/
+  `ACCESS_COARSE_LOCATION` grant, or a `NoSuchMethodError` from an
+  older/stripped bridge, would linger on the JNIEnv. The next JNI call on
+  the same BEAM scheduler thread was then undefined behaviour per the JNI
+  spec, and a null bridge cache passed a null `jclass` into
+  `CallStaticVoidMethod` (also UB).
+
+  Fix: introduce a `cacheMethod` helper for `nativeRegister` (same shape as
+  the recent mob_bluetooth/mob_background fixes); guard `g_loc_cls == null`
+  and `<method> == null` in the runtime NIFs (silent `:ok` — matches the
+  moduledoc's documented failure mode where a missing plist key / manifest
+  entry silently does nothing); `jni.exceptionClear(jenv)` after both
+  `CallStaticVoidMethod` sites (helper `callBridgePidStr` covers
+  `get_once` and `start`; `nif_location_stop` calls directly).
+
+  Return-type contracts are unchanged (`MobLocation.get_once/1`,
+  `start/2`, `stop/1` all return `socket`). iOS path is untouched.
+
+---
+
 ## [0.1.3] - 2026-06-16
 
 ### Changed
