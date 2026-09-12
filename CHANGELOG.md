@@ -10,6 +10,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ### Fixed
 
+- **Android: `location_start` no longer leaks the previous LocationCallback**
+  (MOB-76). Calling `MobLocation.start/2` twice without an intervening
+  `stop/1` (e.g. the user switching accuracy, or the plugin re-activating
+  mid-session) overwrote `locationCallback` without ever removing the
+  previous one from `FusedLocationProviderClient`. Result: doubled
+  location callbacks per fix, doubled battery drain, and no way to stop
+  the leaked callback except by restarting the process. `location_start`
+  now removes the previous callback before assigning the new one —
+  symmetric with `location_stop`'s remove/null pattern.
+
 - **Android: JNI exception no longer leaks onto the BEAM scheduler thread**
   (MOB-77). The zig NIF had zero `ExceptionCheck`/`ExceptionClear` calls,
   and the runtime NIFs didn't guard on a missing bridge cache — a

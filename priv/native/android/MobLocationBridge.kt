@@ -95,6 +95,12 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
             else -> Priority.PRIORITY_BALANCED_POWER_ACCURACY
         }
         val client = LocationServices.getFusedLocationProviderClient(activity)
+        // If location_start was called before without an intervening
+        // location_stop (e.g. user switched accuracy, or the plugin was
+        // re-activated mid-session), the previous callback keeps firing
+        // AND the new one starts — doubled updates, doubled battery drain.
+        // Symmetric with location_stop's remove/null. See MOB-76.
+        locationCallback?.let { locationClient?.removeLocationUpdates(it) }
         locationClient = client
         val req = LocationRequest.Builder(priority, 5000).build()
         val cb = object : LocationCallback() {
