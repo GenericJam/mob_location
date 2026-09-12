@@ -48,17 +48,43 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
         activityRef = java.lang.ref.WeakReference(activity)
     }
 
+    // Request BOTH fine and coarse — Android 12+ shows separate toggles for
+    // "precise" vs "approximate" location, and a user who grants approximate
+    // only should still be able to use the plugin (it still gets a location
+    // via the Fused API, just at reduced accuracy). See MOB-75.
     override fun permissionsFor(cap: String): Array<String>? =
-        if (cap == "location") arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION) else null
+        if (cap == "location") {
+            arrayOf(
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            )
+        } else {
+            null
+        }
+
+    // Either FINE or COARSE is enough. Android 12+ can grant COARSE only;
+    // Fused Location Provider still delivers positions at coarser accuracy.
+    private fun hasLocationPermission(activity: Activity): Boolean {
+        val fine =
+            ContextCompat.checkSelfPermission(
+                activity,
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+            )
+        val coarse =
+            ContextCompat.checkSelfPermission(
+                activity,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            )
+        return fine == PackageManager.PERMISSION_GRANTED ||
+            coarse == PackageManager.PERMISSION_GRANTED
+    }
 
     @JvmStatic
     fun location_get_once(pid: Long, accuracy: String) {
         val activity = activityRef?.get() ?: run {
             nativeDeliverLocationError(pid, 1); return
         }
-        if (ContextCompat.checkSelfPermission(activity, android.Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (!hasLocationPermission(activity)) {
             nativeDeliverLocationError(pid, 0); return
         }
         val client = LocationServices.getFusedLocationProviderClient(activity)
@@ -84,9 +110,7 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
     @JvmStatic
     fun location_start(pid: Long, accuracy: String) {
         val activity = activityRef?.get() ?: return
-        if (ContextCompat.checkSelfPermission(activity, android.Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (!hasLocationPermission(activity)) {
             nativeDeliverLocationError(pid, 0); return
         }
         val priority = when (accuracy) {

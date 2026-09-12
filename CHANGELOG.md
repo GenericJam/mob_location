@@ -10,6 +10,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ### Fixed
 
+- **Android: coarse-only location grants are now accepted** (MOB-75).
+  `permissionsFor("location")` requested only `ACCESS_FINE_LOCATION`,
+  and `checkSelfPermission` gated on FINE alone. Android 12+ shows
+  separate "Precise" and "Approximate" toggles in the runtime prompt —
+  a user who granted Approximate only got `{:location, :error,
+  :permission_denied}` even though the Fused Location Provider would
+  happily deliver a coarser position. Now: request both permissions
+  (Android 12+ shows both toggles) and treat EITHER granted as
+  sufficient. Fused provider ignores `PRIORITY_HIGH_ACCURACY` under
+  coarse-only grants — user gets balanced accuracy, but they get a
+  location.
+
 - **Android: `location_start` no longer leaks the previous LocationCallback**
   (MOB-76). Calling `MobLocation.start/2` twice without an intervening
   `stop/1` (e.g. the user switching accuracy, or the plugin re-activating
