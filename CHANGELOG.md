@@ -6,21 +6,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
-## [Unreleased]
+## [0.1.4] - 2026-09-30
+
+### Changed
+
+- **Re-signed with plugin envelope v2** (MOB-287). mob_dev 0.7.2+ verifies
+  this signature before evaluating the manifest. mob_dev 0.7.0 / 0.7.1 can't
+  read v2 signatures and report this release as `invalid signature` —
+  upgrade the host app to `{:mob_dev, "~> 0.7.2", only: :dev, runtime: false}`.
 
 ### Fixed
 
-- **Android: coarse-only location grants are now accepted** (MOB-75).
-  `permissionsFor("location")` requested only `ACCESS_FINE_LOCATION`,
-  and `checkSelfPermission` gated on FINE alone. Android 12+ shows
-  separate "Precise" and "Approximate" toggles in the runtime prompt —
-  a user who granted Approximate only got `{:location, :error,
-  :permission_denied}` even though the Fused Location Provider would
-  happily deliver a coarser position. Now: request both permissions
-  (Android 12+ shows both toggles) and treat EITHER granted as
-  sufficient. Fused provider ignores `PRIORITY_HIGH_ACCURACY` under
-  coarse-only grants — user gets balanced accuracy, but they get a
-  location.
+- **Android: `MobLocation.get_once/1` and `start/2` now work under a
+  coarse-only grant** (MOB-75). `permissionsFor("location")` requested
+  only `ACCESS_FINE_LOCATION`, and the bridge gated on FINE alone.
+  Android 12+ shows separate "Precise" and "Approximate" toggles in the
+  runtime prompt, so a user who granted Approximate only got
+  `{:location, :error, :permission_denied}`. The bridge now requests both
+  permissions and treats either grant as sufficient; under coarse-only
+  the Fused provider ignores `PRIORITY_HIGH_ACCURACY` and delivers
+  balanced accuracy. Note that core's `Mob.Permissions.request/2` still
+  reports `{:permission, :location, :denied}` for a coarse-only grant,
+  because it requires every requested permission to be granted. Apps
+  that gate on that event (as the bundled `DemoScreen` does) won't call
+  `get_once/1`/`start/2` in that case.
 
 - **Android: `location_start` no longer leaks the previous LocationCallback**
   (MOB-76). Calling `MobLocation.start/2` twice without an intervening
@@ -52,8 +61,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
   Return-type contracts are unchanged (`MobLocation.get_once/1`,
   `start/2`, `stop/1` all return `socket`). iOS path is untouched.
-
----
 
 ## [0.1.3] - 2026-06-16
 
