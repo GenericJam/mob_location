@@ -1,4 +1,4 @@
-# AGENTS.md — orientation for AI agents working on mob_location
+# mob_location — Agent Instructions
 
 You're in **mob_location**, a Mob plugin for device location — GPS + network fixes, one-shot (`get_once`) or continuous (`start` / `stop`). iOS uses `CLLocationManager`; Android uses `FusedLocationProviderClient` via the plugin-owned `io.mob.location.MobLocationBridge` Kotlin bridge. Updates arrive on the caller's process inbox as `{:location, %{lat:, lon:, accuracy:, altitude:}}` or `{:location, :error, reason}`.
 
@@ -59,7 +59,17 @@ The suite validates the manifest against the real pre-publish validator and asse
 7. **`{:location, :error, reason}` is not `{:error, reason}`.** The three-tuple shape is deliberate: it keeps error deliveries out of the same handler that owns fix data. `reason` is `:permission_denied` (denied or revoked mid-session) or `:unavailable` (OS can't get a fix right now). Add new reasons as atoms; don't smuggle strings.
 8. **Host builds have no NIF linked.** The `.erl` stub tolerates NIF load failure so a plain `mix test` on the host doesn't crash. Any code that assumes the NIF is loaded (e.g. calling `:mob_location_nif.location_stop()` from a non-device test) must guard for `nif_not_loaded` or run only on a device.
 
+## Worktrees
+
+**Default assumption: work happens in a git worktree.** Kevin runs multiple agents in parallel; each task in its own worktree prevents conflicts.
+
+If a task is assigned to you and worktree usage isn't mentioned, ask whether one is wanted. Yes for anything non-trivial or that touches native code. In-place is fine for a single-file doc edit, one-line config change, or a version bump.
+
+The git stash stack is shared across worktrees — never bare `git stash` / `git stash pop`.
+
 ## Pre-commit checklist
+
+Run all in this order:
 
 ```bash
 mix test                # full suite
@@ -71,6 +81,31 @@ The pre-push hook (`.githooks/pre-push`, activated via `mix setup` or `git confi
 
 Native changes (`.m` / `.zig` / `.kt`) aren't exercised by `mix test` — they need a `mix mob.deploy --native` of a host app and a device check before committing.
 
-## Release
+### Tests are part of the change
 
-`@version` in `mix.exs` on master triggers `.github/workflows/release.yml` (tag + GitHub Release + Hex publish, each step idempotent). The workflow also verifies the CI signing key matches `priv/mob_plugin.pub` before publishing. Canonical release process lives at [`~/code/mob/RELEASE.md`](../mob/RELEASE.md); do NOT bump the version without explicit permission.
+New behaviour ships with a test unless the change is small enough that a test would only restate it. The bar is: **would this test fail if the fix were reverted?** Check by reverting it.
+
+For mob_location specifically:
+
+* Any change to `{:location, ...}` delivery shape needs a test that pins the shape (a screen-level integration is fine — the NIF isn't callable in host tests).
+* Manifest changes (new `plist_keys`, gradle deps, permissions) need a `Validator.validate_plugin/2` assertion — the existing manifest test suite is where these belong.
+* Coarse-only grant handling on Android (MOB-75) is a permanent invariant — don't add code that treats coarse-only as a denial.
+
+### Adversarial review — before every non-trivial commit
+
+Spawn a subagent, point it at the diff, tell it to find defects rather than approve. Especially for this plugin:
+
+* **Permission-flow regressions.** The demo screen's `pending`-then-dispatch-on-grant pattern is the contract. A change that lets `start/2` run before `Mob.Permissions.request/2` has resolved is a silent-do-nothing bug.
+* **Battery-cost regressions.** Anything that defaults `start/2` to `:high` accuracy, or that fails to `stop/1` on screen exit, is a battery bug users won't report but WILL rate the app poorly for.
+* **`stop/1` idempotency.** Users tap Stop twice, apps call `stop/1` in both `terminate/2` and a nav handler. The NIF must tolerate that.
+* **NIF-not-loaded fallback.** The host build has no native linked. Any code path reachable from `mix test` that assumes the NIF is loaded will crash CI.
+
+Skip only for: formatting, a typo, a version bump, a changelog edit.
+
+## Release flow
+
+Canonical process in [`~/code/mob/RELEASE.md`](../mob/RELEASE.md). mob_location specifics:
+
+* `@version` in `mix.exs` on master is the trigger; `.github/workflows/release.yml` handles tag + GitHub Release + Hex publish, each step idempotent. The workflow also verifies the CI signing key matches `priv/mob_plugin.pub` before publishing. Do NOT bump the version without explicit permission.
+* The `mob` floor pin in `mix.exs` is load-bearing. Do not bump it if the plugin uses a new mob feature that hasn't shipped yet.
+* **Never ship without physical-device verification.** Simulators lie for this plugin — iOS simulator location is a fake feed set from the Xcode menu; Android emulator location is `adb emu geo fix`. Neither exercises real GPS acquisition, real permission dialogs, or coarse-vs-fine grant handling. Kevin has a Moto G Power 5G 2024 and an iPhone SE for device verification.
