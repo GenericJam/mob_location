@@ -6,6 +6,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **iOS: every `Mob.Permissions.request(socket, :location)` gets exactly one
+  answer, to its own pid** (MOB-391). The permission handler kept one global
+  delegate holding one pid, so a second request while the dialog was up
+  replaced the first requester, which never got an answer. And it relied on
+  `requestWhenInUseAuthorization` calling the delegate, which iOS does only
+  while the status is still undecided, so a request after the user had
+  answered could go unanswered. The handler now answers a decided status at
+  once and keeps every requester that arrives while the dialog is up,
+  answering all of them when the user decides. Approximate location ("Precise"
+  off) is still `:granted`.
+- Android needs no change here: the generated app's permission queue (mob_new
+  0.6.6, MOB-391) now reports a coarse-only (Approximate) grant as
+  `{:permission, :location, :granted}`, so the note under 0.1.4 below about
+  core reporting `:denied` no longer applies to apps that port it.
+
 ## [0.1.4] - 2026-09-30
 
 ### Changed

@@ -30,40 +30,60 @@ static void send_permission(ErlNifPid pid, const char *status) {
   enif_free_env(env);
 }
 
-// ── Permission delegate ───────────────────────────────────────────────────
+// ── Permission flow ───────────────────────────────────────────────────────
+// Every Mob.Permissions.request(socket, :location) gets exactly one answer, to
+// its own pid (MOB-391). One long-lived manager and delegate; requesters that
+// arrive while the dialog is undecided wait in g_permission_waiting and are
+// all answered when the status is decided. A decided status is answered at
+// once: requestWhenInUseAuthorization does nothing, and calls no delegate,
+// unless the status is still NotDetermined. Main queue only.
 @interface MobLocationPluginPermissionDelegate : NSObject <CLLocationManagerDelegate>
-@property(nonatomic) ErlNifPid pid;
-@property(nonatomic) BOOL resolved;
 @end
 
 static MobLocationPluginPermissionDelegate *g_permission_delegate = nil;
 static CLLocationManager *g_permission_manager = nil;
+static NSMutableArray<NSValue *> *g_permission_waiting = nil;
+
+// Approximate ("Precise: off") is still kCLAuthorizationStatusAuthorizedWhenInUse,
+// with accuracyAuthorization = reducedAccuracy, so it answers :granted.
+static BOOL location_status_granted(CLAuthorizationStatus status) {
+  return status == kCLAuthorizationStatusAuthorizedWhenInUse ||
+         status == kCLAuthorizationStatusAuthorizedAlways;
+}
+
+static void answer_waiting_permission_requests(CLAuthorizationStatus status) {
+  if (status == kCLAuthorizationStatusNotDetermined) return; // dialog still up
+  const char *answer = location_status_granted(status) ? "granted" : "denied";
+  NSArray<NSValue *> *waiting = [g_permission_waiting copy];
+  [g_permission_waiting removeAllObjects];
+  for (NSValue *boxed in waiting) {
+    ErlNifPid pid;
+    [boxed getValue:&pid size:sizeof(pid)];
+    send_permission(pid, answer);
+  }
+}
 
 @implementation MobLocationPluginPermissionDelegate
 - (void)locationManagerDidChangeAuthorization:(CLLocationManager *)manager {
-  CLAuthorizationStatus status = manager.authorizationStatus;
-  if (status == kCLAuthorizationStatusNotDetermined) {
-    // Dialog still on screen / OS hasn't picked an initial state.
-    return;
-  }
-  self.resolved = YES;
-  ErlNifPid p = self.pid;
-  BOOL granted = (status == kCLAuthorizationStatusAuthorizedWhenInUse ||
-                  status == kCLAuthorizationStatusAuthorizedAlways);
-  send_permission(p, granted ? "granted" : "denied");
+  answer_waiting_permission_requests(manager.authorizationStatus);
 }
 @end
 
 static void request_location_permission(ErlNifPid pid) {
   dispatch_async(dispatch_get_main_queue(), ^{
     if (!g_permission_manager) {
+      g_permission_waiting = [NSMutableArray array];
+      g_permission_delegate = [[MobLocationPluginPermissionDelegate alloc] init];
       g_permission_manager = [[CLLocationManager alloc] init];
+      g_permission_manager.delegate = g_permission_delegate;
     }
-    g_permission_delegate = [[MobLocationPluginPermissionDelegate alloc] init];
-    g_permission_delegate.pid = pid;
-    g_permission_manager.delegate = g_permission_delegate;
-    // requestWhenInUseAuthorization is idempotent — already-granted permissions
-    // short-circuit and the delegate fires immediately.
+    CLAuthorizationStatus status = g_permission_manager.authorizationStatus;
+    if (status != kCLAuthorizationStatusNotDetermined) {
+      send_permission(pid, location_status_granted(status) ? "granted" : "denied");
+      return;
+    }
+    ErlNifPid copy = pid;
+    [g_permission_waiting addObject:[NSValue valueWithBytes:&copy objCType:@encode(ErlNifPid)]];
     [g_permission_manager requestWhenInUseAuthorization];
   });
 }
