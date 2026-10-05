@@ -6,7 +6,7 @@ defmodule MobLocation.MixProject do
   def project do
     [
       app: :mob_location,
-      version: "0.1.4",
+      version: "0.1.5",
       elixir: "~> 1.17",
       deps: deps(),
       aliases: aliases(),
