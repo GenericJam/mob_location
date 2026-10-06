@@ -26,6 +26,10 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
     private var locationClient: FusedLocationProviderClient? = null
     private var locationCallback: LocationCallback? = null
 
+    // locationClient/locationCallback are written by BEAM threads
+    // (location_start/stop) and by a request's failure listener on main.
+    private val stateLock = Any()
+
     @JvmStatic external fun nativeRegister()
 
     @JvmStatic external fun nativeDeliverLocation(
@@ -136,13 +140,6 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
             else -> Priority.PRIORITY_BALANCED_POWER_ACCURACY
         }
         val client = LocationServices.getFusedLocationProviderClient(activity)
-        // If location_start was called before without an intervening
-        // location_stop (e.g. user switched accuracy, or the plugin was
-        // re-activated mid-session), the previous callback keeps firing
-        // AND the new one starts — doubled updates, doubled battery drain.
-        // Symmetric with location_stop's remove/null. See MOB-76.
-        locationCallback?.let { locationClient?.removeLocationUpdates(it) }
-        locationClient = client
         val req = LocationRequest.Builder(priority, 5000).build()
         val cb = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
@@ -151,29 +148,44 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
                 }
             }
         }
-        // Same failure handling as location_get_once. The failure listener runs
-        // on main, possibly before this thread returns, so the state is set
-        // first; it only clears it if no later location_start replaced it.
-        locationCallback = cb
-        try {
-            client.requestLocationUpdates(req, cb, activity.mainLooper)
-                .addOnFailureListener { e ->
-                    if (locationCallback === cb) {
-                        locationCallback = null
-                        locationClient = null
+        synchronized(stateLock) {
+            // If location_start was called before without an intervening
+            // location_stop (e.g. user switched accuracy, or the plugin was
+            // re-activated mid-session), the previous callback keeps firing
+            // AND the new one starts — doubled updates, doubled battery drain.
+            // Symmetric with location_stop's remove/null. See MOB-76.
+            locationCallback?.let { locationClient?.removeLocationUpdates(it) }
+            locationClient = client
+            locationCallback = cb
+            // Same failure handling as location_get_once. A failure only
+            // clears the state and answers if no later location_start or
+            // location_stop has replaced this request.
+            try {
+                client.requestLocationUpdates(req, cb, activity.mainLooper)
+                    .addOnFailureListener { e ->
+                        val current = synchronized(stateLock) {
+                            (locationCallback === cb).also { mine ->
+                                if (mine) {
+                                    locationCallback = null
+                                    locationClient = null
+                                }
+                            }
+                        }
+                        if (current) nativeDeliverLocationError(pid, errorCode(e))
                     }
-                    nativeDeliverLocationError(pid, errorCode(e))
-                }
-        } catch (_: SecurityException) {
-            locationCallback = null
-            locationClient = null
-            nativeDeliverLocationError(pid, 0)
+            } catch (_: SecurityException) {
+                locationCallback = null
+                locationClient = null
+                nativeDeliverLocationError(pid, 0)
+            }
         }
     }
 
     @JvmStatic
     fun location_stop() {
-        locationCallback?.let { locationClient?.removeLocationUpdates(it) }
-        locationCallback = null
+        synchronized(stateLock) {
+            locationCallback?.let { locationClient?.removeLocationUpdates(it) }
+            locationCallback = null
+        }
     }
 }
