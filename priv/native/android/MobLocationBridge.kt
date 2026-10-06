@@ -88,22 +88,33 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
             nativeDeliverLocationError(pid, 0); return
         }
         val client = LocationServices.getFusedLocationProviderClient(activity)
-        client.lastLocation.addOnSuccessListener { loc ->
-            if (loc != null) {
-                nativeDeliverLocation(pid, loc.latitude, loc.longitude, loc.accuracy.toDouble(), loc.altitude)
-            } else {
-                val req = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 1000)
-                    .setMaxUpdates(1).build()
-                val cb = object : LocationCallback() {
-                    override fun onLocationResult(result: LocationResult) {
-                        result.lastLocation?.let { l ->
-                            nativeDeliverLocation(pid, l.latitude, l.longitude, l.accuracy.toDouble(), l.altitude)
+        // The check above can go stale: the grant may be revoked before the
+        // request, or before the success listener runs. Fused throws
+        // SecurityException then; report it as permission_denied.
+        try {
+            client.lastLocation.addOnSuccessListener { loc ->
+                if (loc != null) {
+                    nativeDeliverLocation(pid, loc.latitude, loc.longitude, loc.accuracy.toDouble(), loc.altitude)
+                } else {
+                    val req = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 1000)
+                        .setMaxUpdates(1).build()
+                    val cb = object : LocationCallback() {
+                        override fun onLocationResult(result: LocationResult) {
+                            result.lastLocation?.let { l ->
+                                nativeDeliverLocation(pid, l.latitude, l.longitude, l.accuracy.toDouble(), l.altitude)
+                            }
+                            client.removeLocationUpdates(this)
                         }
-                        client.removeLocationUpdates(this)
+                    }
+                    try {
+                        client.requestLocationUpdates(req, cb, activity.mainLooper)
+                    } catch (_: SecurityException) {
+                        nativeDeliverLocationError(pid, 0)
                     }
                 }
-                client.requestLocationUpdates(req, cb, activity.mainLooper)
             }
+        } catch (_: SecurityException) {
+            nativeDeliverLocationError(pid, 0)
         }
     }
 
@@ -134,8 +145,14 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
                 }
             }
         }
-        locationCallback = cb
-        client.requestLocationUpdates(req, cb, activity.mainLooper)
+        try {
+            client.requestLocationUpdates(req, cb, activity.mainLooper)
+            locationCallback = cb
+        } catch (_: SecurityException) {
+            locationCallback = null
+            locationClient = null
+            nativeDeliverLocationError(pid, 0)
+        }
     }
 
     @JvmStatic

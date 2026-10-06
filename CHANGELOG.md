@@ -6,6 +6,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Android: the bridge passes `./gradlew :app:lintRelease`, and a revoked
+  grant answers instead of crashing** (MOB-401). `get_once/1` and `start/2`
+  checked the permission up front, but the grant can be revoked before the
+  Fused call or before `get_once`'s async fallback request runs; Fused then
+  throws `SecurityException`. Each call now handles it and delivers
+  `{:location, :error, :permission_denied}` (a failed `start/2` leaves no
+  callback registered). This also clears the three `MissingPermission` lint
+  errors that failed a host app's release lint. No change for granted
+  permissions.
+
 ## [0.1.5] - 2026-10-04
 
 ### Fixed
