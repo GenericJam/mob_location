@@ -88,35 +88,41 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
             nativeDeliverLocationError(pid, 0); return
         }
         val client = LocationServices.getFusedLocationProviderClient(activity)
-        // The check above can go stale: the grant may be revoked before the
-        // request, or before the success listener runs. Fused throws
-        // SecurityException then; report it as permission_denied.
+        // A failed Fused call must still answer the caller: a SecurityException
+        // (the grant is gone despite the check above) is permission_denied,
+        // anything else (e.g. Play services unavailable) is unavailable. It can
+        // throw synchronously or fail the returned Task, so handle both.
         try {
-            client.lastLocation.addOnSuccessListener { loc ->
-                if (loc != null) {
-                    nativeDeliverLocation(pid, loc.latitude, loc.longitude, loc.accuracy.toDouble(), loc.altitude)
-                } else {
-                    val req = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 1000)
-                        .setMaxUpdates(1).build()
-                    val cb = object : LocationCallback() {
-                        override fun onLocationResult(result: LocationResult) {
-                            result.lastLocation?.let { l ->
-                                nativeDeliverLocation(pid, l.latitude, l.longitude, l.accuracy.toDouble(), l.altitude)
+            client.lastLocation
+                .addOnSuccessListener { loc ->
+                    if (loc != null) {
+                        nativeDeliverLocation(pid, loc.latitude, loc.longitude, loc.accuracy.toDouble(), loc.altitude)
+                    } else {
+                        val req = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 1000)
+                            .setMaxUpdates(1).build()
+                        val cb = object : LocationCallback() {
+                            override fun onLocationResult(result: LocationResult) {
+                                result.lastLocation?.let { l ->
+                                    nativeDeliverLocation(pid, l.latitude, l.longitude, l.accuracy.toDouble(), l.altitude)
+                                }
+                                client.removeLocationUpdates(this)
                             }
-                            client.removeLocationUpdates(this)
+                        }
+                        try {
+                            client.requestLocationUpdates(req, cb, activity.mainLooper)
+                                .addOnFailureListener { e -> nativeDeliverLocationError(pid, errorCode(e)) }
+                        } catch (_: SecurityException) {
+                            nativeDeliverLocationError(pid, 0)
                         }
                     }
-                    try {
-                        client.requestLocationUpdates(req, cb, activity.mainLooper)
-                    } catch (_: SecurityException) {
-                        nativeDeliverLocationError(pid, 0)
-                    }
                 }
-            }
+                .addOnFailureListener { e -> nativeDeliverLocationError(pid, errorCode(e)) }
         } catch (_: SecurityException) {
             nativeDeliverLocationError(pid, 0)
         }
     }
+
+    private fun errorCode(e: Exception): Int = if (e is SecurityException) 0 else 1
 
     @JvmStatic
     fun location_start(pid: Long, accuracy: String) {
@@ -145,9 +151,19 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
                 }
             }
         }
+        // Same failure handling as location_get_once. The failure listener runs
+        // on main, possibly before this thread returns, so the state is set
+        // first; it only clears it if no later location_start replaced it.
+        locationCallback = cb
         try {
             client.requestLocationUpdates(req, cb, activity.mainLooper)
-            locationCallback = cb
+                .addOnFailureListener { e ->
+                    if (locationCallback === cb) {
+                        locationCallback = null
+                        locationClient = null
+                    }
+                    nativeDeliverLocationError(pid, errorCode(e))
+                }
         } catch (_: SecurityException) {
             locationCallback = null
             locationClient = null

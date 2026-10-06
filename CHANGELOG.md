@@ -10,15 +10,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ### Fixed
 
-- **Android: the bridge passes `./gradlew :app:lintRelease`, and a revoked
-  grant answers instead of crashing** (MOB-401). `get_once/1` and `start/2`
-  checked the permission up front, but the grant can be revoked before the
-  Fused call or before `get_once`'s async fallback request runs; Fused then
-  throws `SecurityException`. Each call now handles it and delivers
-  `{:location, :error, :permission_denied}` (a failed `start/2` leaves no
-  callback registered). This also clears the three `MissingPermission` lint
-  errors that failed a host app's release lint. No change for granted
-  permissions.
+- **Android: a failed Fused location call answers the caller; the bridge
+  passes `./gradlew :app:lintRelease`** (MOB-401). `get_once/1` and `start/2`
+  ignored a failed `lastLocation` / `requestLocationUpdates` (no failure
+  listener), so the caller never got a reply. A failure now delivers
+  `{:location, :error, :permission_denied}` for a `SecurityException` and
+  `{:location, :error, :unavailable}` otherwise (e.g. Play services
+  missing); a failed `start/2` leaves no callback registered. The calls also
+  handle a synchronous `SecurityException` explicitly, which clears the three
+  `MissingPermission` errors that failed a host app's release lint. No change
+  when the calls succeed.
 
 ## [0.1.5] - 2026-10-04
 
