@@ -6,6 +6,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Android: a failed Fused location call answers the caller; the bridge
+  passes `./gradlew :app:lintRelease`** (MOB-401). `get_once/1` and `start/2`
+  ignored a failed `lastLocation` / `requestLocationUpdates` (no failure
+  listener), so the caller never got a reply. A failure now delivers
+  `{:location, :error, :permission_denied}` for a `SecurityException` and
+  `{:location, :error, :unavailable}` for any other failure; a failed
+  `start/2` leaves no callback registered. A request the OS leaves pending
+  (seen with Play services disabled or the location app-op denied) still
+  gets no reply (MOB-403). The calls also
+  handle a synchronous `SecurityException` explicitly, which clears the three
+  `MissingPermission` errors that failed a host app's release lint. No change
+  when the calls succeed.
+
 ## [0.1.5] - 2026-10-04
 
 ### Fixed
