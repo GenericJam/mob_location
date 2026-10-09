@@ -1,8 +1,11 @@
 %{
   name: :mob_location,
-  mob_version: "~> 0.6",
+  mob_version: "~> 0.9",
   plugin_spec_version: 1,
   description: "Device location (GPS/network) — extracted from mob core in Wave 2",
+  # On-device proof for `mix mob.selftest` / mob_ci: location_stop/0 through
+  # the NIF, then a location_get_once/0 round trip (see Mob.Plugin.SelfTest).
+  selftest: MobLocation.SelfTest,
   # A sample screen the host can navigate to by route (auto-listed by a home
   # that enumerates Mob.Plugins.screens/0). Pure-Elixir + hot-pushable; drop it
   # and this entry in a real app that builds its own UI.

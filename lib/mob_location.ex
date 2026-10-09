@@ -20,6 +20,8 @@ defmodule MobLocation do
 
     * `:permission_denied` — user denied `:location` (or revoked it mid-session).
     * `:unavailable` — the OS can't get a fix right now.
+    * `:no_activity` — Android only: the plugin bootstrap never gave the bridge
+      an Activity (a host integration bug, caught by the self-test).
 
   iOS: `CLLocationManager`. Android: `FusedLocationProviderClient`.
   """

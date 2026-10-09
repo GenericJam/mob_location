@@ -77,10 +77,17 @@ inline fn pidFromLong(jpid: jni.JLong) erts.ErlNifPid {
     return .{ .pid = low };
 }
 
+/// {error, bridge_not_registered}: nativeRegister never ran (MobPluginBootstrap
+/// did not call register()) or a method-ID lookup failed. The public API ignores
+/// the return value; MobLocation.SelfTest turns it into a failure (MOB-411).
+fn bridgeNotRegistered(env: ?*erts.ErlNifEnv) erts.ERL_NIF_TERM {
+    return erts.makeTuple(env, .{ erts.atom(env, "error"), erts.atom(env, "bridge_not_registered") });
+}
+
 /// Call `MobLocationBridge.<method>(pid_long, arg)` — async; the fix lands later
 /// via the nativeDeliverLocation thunk. Returns :ok unconditionally.
 fn callBridgePidStr(env: ?*erts.ErlNifEnv, method: jni.JMethodID, pid: erts.ErlNifPid, arg: ?[*:0]const u8) erts.ERL_NIF_TERM {
-    if (g_loc_cls == null or method == null) return erts.ok(env);
+    if (g_loc_cls == null or method == null) return bridgeNotRegistered(env);
     var attached: c_int = 0;
     const jenv = get_jenv(&attached) orelse return erts.ok(env);
     const jarg: jni.JString = if (arg) |a| jni.newStringUTF(jenv, a) else null;
@@ -121,7 +128,8 @@ export fn Java_io_mob_location_MobLocationBridge_nativeDeliverLocation(jenv: *jn
 }
 
 // Error delivery — Kotlin passes a small code instead of a string so no JNI
-// string read is needed: 0 = permission_denied, anything else = unavailable.
+// string read is needed: 0 = permission_denied, 2 = no_activity (the bootstrap
+// never handed the bridge an Activity), anything else = unavailable.
 // Builds {:location, :error, reason}.
 export fn Java_io_mob_location_MobLocationBridge_nativeDeliverLocationError(jenv: *jni.JNIEnv, cls: jni.JClass, pid_long: jni.JLong, code: c_int) callconv(.c) void {
     _ = jenv;
@@ -129,7 +137,7 @@ export fn Java_io_mob_location_MobLocationBridge_nativeDeliverLocationError(jenv
     var pid = pidFromLong(pid_long);
     const env = erts.enif_alloc_env() orelse return;
     defer erts.enif_free_env(env);
-    const reason = if (code == 0) erts.atom(env, "permission_denied") else erts.atom(env, "unavailable");
+    const reason = if (code == 0) erts.atom(env, "permission_denied") else if (code == 2) erts.atom(env, "no_activity") else erts.atom(env, "unavailable");
     const msg = erts.makeTuple(env, .{ erts.atom(env, "location"), erts.atom(env, "error"), reason });
     _ = erts.enif_send(null, &pid, env, msg);
 }
@@ -168,7 +176,7 @@ fn nif_location_stop(
 ) callconv(.c) erts.ERL_NIF_TERM {
     _ = argc;
     _ = argv;
-    if (g_loc_cls == null or g_loc.stop == null) return erts.ok(env);
+    if (g_loc_cls == null or g_loc.stop == null) return bridgeNotRegistered(env);
     var attached: c_int = 0;
     const jenv = get_jenv(&attached) orelse return erts.ok(env);
     jenv.*.CallStaticVoidMethod.?(jenv, g_loc_cls, g_loc.stop);

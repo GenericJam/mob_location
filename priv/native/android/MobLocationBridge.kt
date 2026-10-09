@@ -40,7 +40,7 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
         alt: Double,
     )
 
-    // code: 0 = permission_denied, else = unavailable
+    // code: 0 = permission_denied, 2 = no_activity, else = unavailable
     @JvmStatic external fun nativeDeliverLocationError(pid: Long, code: Int)
 
     @JvmStatic
@@ -86,7 +86,7 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
     @JvmStatic
     fun location_get_once(pid: Long, accuracy: String) {
         val activity = activityRef?.get() ?: run {
-            nativeDeliverLocationError(pid, 1); return
+            nativeDeliverLocationError(pid, 2); return
         }
         if (!hasLocationPermission(activity)) {
             nativeDeliverLocationError(pid, 0); return

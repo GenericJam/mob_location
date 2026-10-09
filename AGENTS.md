@@ -57,6 +57,7 @@ The suite validates the manifest against the real pre-publish validator and asse
 5. **Continuous updates burn battery.** `start/2` runs `FusedLocationProviderClient` / `CLLocationManager` at the requested accuracy until `stop/1`. Call `stop/1` from `terminate/2`, on tab-away, on a "pause" tap — anywhere you no longer need fixes. `:high` accuracy on both platforms wakes the GPS chip; `:balanced` mixes cell / wifi and is what most apps want.
 6. **Accuracy vs battery is user-visible.** Default is `:balanced`. Only reach for `:high` when the user asked for a map pin or a navigation update; `:low` when a city-level fix is enough. A screen that leaves `:high` running in the background is what will land the app on the OS's battery-usage shame list.
 7. **`{:location, :error, reason}` is not `{:error, reason}`.** The three-tuple shape is deliberate: it keeps error deliveries out of the same handler that owns fix data. `reason` is `:permission_denied` (denied or revoked mid-session) or `:unavailable` (OS can't get a fix right now). Add new reasons as atoms; don't smuggle strings.
+  (Android also delivers `:no_activity` when the bootstrap never gave the bridge an Activity.)
 8. **Host builds have no NIF linked.** The `.erl` stub tolerates NIF load failure so a plain `mix test` on the host doesn't crash. Any code that assumes the NIF is loaded (e.g. calling `:mob_location_nif.location_stop()` from a non-device test) must guard for `nif_not_loaded` or run only on a device.
 
 ## Worktrees
