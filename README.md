@@ -34,6 +34,7 @@ def handle_info({:location, :error, reason}, socket), do: ...
 `accuracy:` is `:high | :balanced | :low` (default `:balanced`). Error
 `reason` atoms: `:permission_denied` (user denied or revoked `:location`)
 and `:unavailable` (the OS can't get a fix right now).
+  (Android also delivers `:no_activity` when the bootstrap never gave the bridge an Activity.)
 
 ## Development
 
