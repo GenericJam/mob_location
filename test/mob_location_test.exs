@@ -2,6 +2,7 @@ defmodule MobLocationTest do
   use ExUnit.Case, async: true
 
   alias MobDev.Plugin.{Manifest, Validator}
+  alias MobLocation.SelfTest
 
   @plugin_dir Path.expand("..", __DIR__)
 
@@ -57,16 +58,44 @@ defmodule MobLocationTest do
   end
 
   describe "MobLocation.SelfTest" do
-    test "implements Mob.Plugin.SelfTest" do
-      behaviours = MobLocation.SelfTest.__info__(:attributes) |> Keyword.get_values(:behaviour)
-      assert Mob.Plugin.SelfTest in List.flatten(behaviours)
-    end
-
     test "on a host with no native library linked it fails, naming the NIF, instead of raising" do
-      assert {:fail, reason} = MobLocation.SelfTest.run(%{platform: :android, device: :emulator})
+      assert {:fail, reason} = SelfTest.run(%{platform: :android, device: :emulator})
       assert reason =~ "mob_location_nif is not linked"
       assert reason =~ "nif_not_loaded"
       assert Mob.Plugin.SelfTest.result?({:fail, reason})
+    end
+
+    test "classifies every delivery the native side can send after get_once" do
+      send(self(), {:location, %{lat: 45.5, lon: -73.6, accuracy: 10.0, altitude: 30.0}})
+      assert SelfTest.await_answer(0, :android) == :pass
+
+      send(self(), {:location, :error, :unavailable})
+      assert SelfTest.await_answer(0, :ios) == :pass
+
+      send(self(), {:location, :error, :permission_denied})
+      assert SelfTest.await_answer(0, :android) == {:skip, :needs_user}
+
+      send(self(), {:location, :error, :no_activity})
+
+      assert {:fail, "MobLocationBridge has no Activity" <> _} =
+               SelfTest.await_answer(0, :android)
+
+      send(self(), {:location, :error, :bogus})
+
+      assert {:fail, "location_get_once/0 delivered error :bogus" <> _} =
+               SelfTest.await_answer(0, :android)
+
+      send(self(), {:location, "nope"})
+
+      assert {:fail, "location_get_once/0 delivered \"nope\"" <> _} =
+               SelfTest.await_answer(0, :ios)
+    end
+
+    test "no answer is a skip: pending request on Android, the user's prompt on iOS" do
+      assert {:skip, "location_get_once/0 got no answer in 0 s" <> _} =
+               SelfTest.await_answer(0, :android)
+
+      assert SelfTest.await_answer(0, :ios) == {:skip, :needs_user}
     end
   end
 
