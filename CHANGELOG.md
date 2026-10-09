@@ -6,7 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
-## [Unreleased]
+## [0.2.0] - 2026-10-09
 
 ### Added
 
@@ -16,16 +16,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
   or `:unavailable` pass (NIF linked, bridge registered, delivery wired),
   `:permission_denied` is `{:skip, :needs_user}`, no answer in 8 s is a
   skip (MOB-403 on Android, the permission prompt on iOS). Run it with
-  `mix mob.selftest` from a host app (mob_dev 0.7.17). Requires mob 0.9.15;
-  `mob_version` in the manifest is now `~> 0.9`.
+  `mix mob.selftest` from a host app (mob_dev 0.7.17).
+
+### Changed
+
+- Requires mob >= 0.9.15 (was `~> 0.7`), for `Mob.Plugin.SelfTest`;
+  `mob_version` in the manifest is now `~> 0.9` (was `~> 0.6`).
 - **Android: the NIF reports an unregistered bridge.** `location_get_once/0`,
   `location_start/1` and `location_stop/0` answer
   `{:error, :bridge_not_registered}` instead of `:ok` when
-  `MobLocationBridge.register()` never ran or a method-ID lookup failed,
-  and a request made before the bootstrap handed the bridge an Activity
-  delivers `{:location, :error, :no_activity}` instead of `:unavailable`.
+  `MobLocationBridge.register()` never ran or a method-ID lookup failed.
   `MobLocation.get_once/1`, `start/2` and `stop/1` are unchanged (they
-  ignore the return value); the self-test turns both into failures.
+  ignore the return value); `MobLocation.SelfTest` fails on it.
+- **Android: `location_get_once/0` before the bootstrap handed the bridge an
+  Activity now delivers `{:location, :error, :no_activity}`** (previously
+  `:unavailable`). Add a clause for it if your `handle_info` matches error
+  reasons exhaustively. `location_start/1` with no Activity still delivers
+  nothing. `MobLocation.SelfTest` fails on it.
 
 ## [0.1.6] - 2026-10-06
 
