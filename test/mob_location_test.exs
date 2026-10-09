@@ -48,6 +48,26 @@ defmodule MobLocationTest do
 
       assert File.exists?(Path.join(@plugin_dir, m.android.bridge_kt))
     end
+
+    test "declares the self-test, which passes the validator without a warning", %{manifest: m} do
+      assert m.selftest == MobLocation.SelfTest
+      assert %{errors: [], warnings: warnings} = Validator.validate_plugin(m, @plugin_dir)
+      refute Enum.any?(warnings, &(&1 =~ "selftest"))
+    end
+  end
+
+  describe "MobLocation.SelfTest" do
+    test "implements Mob.Plugin.SelfTest" do
+      behaviours = MobLocation.SelfTest.__info__(:attributes) |> Keyword.get_values(:behaviour)
+      assert Mob.Plugin.SelfTest in List.flatten(behaviours)
+    end
+
+    test "on a host with no native library linked it fails, naming the NIF, instead of raising" do
+      assert {:fail, reason} = MobLocation.SelfTest.run(%{platform: :android, device: :emulator})
+      assert reason =~ "mob_location_nif is not linked"
+      assert reason =~ "nif_not_loaded"
+      assert Mob.Plugin.SelfTest.result?({:fail, reason})
+    end
   end
 
   describe "NIF stub agreement" do

@@ -6,6 +6,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **On-device self-test** (MOB-411). `MobLocation.SelfTest` implements
+  `Mob.Plugin.SelfTest` and is declared in the manifest as `selftest:`.
+  It calls `location_stop/0` through the NIF (proof the native library is
+  linked and initialised), then `location_get_once/0` and waits for the
+  native delivery: a fix or `:unavailable` pass, `:permission_denied` is
+  `{:skip, :needs_user}`, no answer in 8 s is a skip (MOB-403). Run it with
+  `mix mob.selftest` from a host app (mob_dev 0.7.17). Requires mob 0.9.15;
+  `mob_version` in the manifest is now `~> 0.9`.
+
 ## [0.1.6] - 2026-10-06
 
 ### Fixed
