@@ -69,6 +69,39 @@ defmodule MobLocationTest do
       send(self(), {:location, %{lat: 45.5, lon: -73.6, accuracy: 10.0, altitude: 30.0}})
       assert SelfTest.await_answer(0, :android) == :pass
 
+      # With speed, course and time, and with them absent.
+      send(
+        self(),
+        {:location,
+         %{
+           lat: 45.5,
+           lon: -73.6,
+           accuracy: 10.0,
+           altitude: 30.0,
+           speed: 2.5,
+           course: 271.0,
+           time: 1_794_840_000_000
+         }}
+      )
+
+      assert SelfTest.await_answer(0, :android) == :pass
+
+      send(
+        self(),
+        {:location,
+         %{
+           lat: 45.5,
+           lon: -73.6,
+           accuracy: 10.0,
+           altitude: 30.0,
+           speed: nil,
+           course: nil,
+           time: 1_794_840_000_000
+         }}
+      )
+
+      assert SelfTest.await_answer(0, :ios) == :pass
+
       send(self(), {:location, :error, :unavailable})
       assert SelfTest.await_answer(0, :ios) == :pass
 
