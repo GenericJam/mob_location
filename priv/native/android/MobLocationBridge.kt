@@ -32,13 +32,32 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
 
     @JvmStatic external fun nativeRegister()
 
+    // speed (m/s) and bearing (degrees) are NaN when the fix has none
+    // (!hasSpeed() / !hasBearing()); the NIF delivers those as nil. time is
+    // the fix's UTC time, unix milliseconds.
     @JvmStatic external fun nativeDeliverLocation(
         pid: Long,
         lat: Double,
         lon: Double,
         acc: Double,
         alt: Double,
+        speed: Double,
+        bearing: Double,
+        time: Long,
     )
+
+    private fun deliver(pid: Long, l: android.location.Location) {
+        nativeDeliverLocation(
+            pid,
+            l.latitude,
+            l.longitude,
+            l.accuracy.toDouble(),
+            l.altitude,
+            if (l.hasSpeed()) l.speed.toDouble() else Double.NaN,
+            if (l.hasBearing()) l.bearing.toDouble() else Double.NaN,
+            l.time,
+        )
+    }
 
     // code: 0 = permission_denied, 2 = no_activity, else = unavailable
     @JvmStatic external fun nativeDeliverLocationError(pid: Long, code: Int)
@@ -100,14 +119,14 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
             client.lastLocation
                 .addOnSuccessListener { loc ->
                     if (loc != null) {
-                        nativeDeliverLocation(pid, loc.latitude, loc.longitude, loc.accuracy.toDouble(), loc.altitude)
+                        deliver(pid, loc)
                     } else {
                         val req = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 1000)
                             .setMaxUpdates(1).build()
                         val cb = object : LocationCallback() {
                             override fun onLocationResult(result: LocationResult) {
                                 result.lastLocation?.let { l ->
-                                    nativeDeliverLocation(pid, l.latitude, l.longitude, l.accuracy.toDouble(), l.altitude)
+                                    deliver(pid, l)
                                 }
                                 client.removeLocationUpdates(this)
                             }
@@ -144,7 +163,7 @@ object MobLocationBridge : io.mob.plugin.MobActivityAware, io.mob.plugin.MobPerm
         val cb = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 result.lastLocation?.let { l ->
-                    nativeDeliverLocation(pid, l.latitude, l.longitude, l.accuracy.toDouble(), l.altitude)
+                    deliver(pid, l)
                 }
             }
         }

@@ -110,14 +110,26 @@ static CLLocationManager *g_location_manager = nil;
   double lon = loc.coordinate.longitude;
   double acc = loc.horizontalAccuracy;
   double alt = loc.altitude;
+  // CoreLocation reports an invalid speed or course as a negative value: nil.
+  double speed = loc.speed;
+  double course = loc.course;
+  long long time = (long long)([loc.timestamp timeIntervalSince1970] * 1000.0);
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     ErlNifEnv *e = enif_alloc_env();
-    ERL_NIF_TERM keys[4] = {enif_make_atom(e, "lat"), enif_make_atom(e, "lon"),
-                            enif_make_atom(e, "accuracy"), enif_make_atom(e, "altitude")};
-    ERL_NIF_TERM vals[4] = {enif_make_double(e, lat), enif_make_double(e, lon),
-                            enif_make_double(e, acc), enif_make_double(e, alt)};
+    ERL_NIF_TERM nil_term = enif_make_atom(e, "nil");
+    ERL_NIF_TERM keys[7] = {enif_make_atom(e, "lat"),      enif_make_atom(e, "lon"),
+                            enif_make_atom(e, "accuracy"), enif_make_atom(e, "altitude"),
+                            enif_make_atom(e, "speed"),    enif_make_atom(e, "course"),
+                            enif_make_atom(e, "time")};
+    ERL_NIF_TERM vals[7] = {enif_make_double(e, lat),
+                            enif_make_double(e, lon),
+                            enif_make_double(e, acc),
+                            enif_make_double(e, alt),
+                            speed < 0 ? nil_term : enif_make_double(e, speed),
+                            course < 0 ? nil_term : enif_make_double(e, course),
+                            enif_make_int64(e, time)};
     ERL_NIF_TERM map;
-    enif_make_map_from_arrays(e, keys, vals, 4, &map);
+    enif_make_map_from_arrays(e, keys, vals, 7, &map);
     ERL_NIF_TERM msg = enif_make_tuple2(e, enif_make_atom(e, "location"), map);
     enif_send(NULL, &p, e, msg);
     enif_free_env(e);

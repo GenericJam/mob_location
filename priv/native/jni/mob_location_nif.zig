@@ -102,9 +102,11 @@ fn callBridgePidStr(env: ?*erts.ErlNifEnv, method: jni.JMethodID, pid: erts.ErlN
 }
 
 // ── Inbound delivery thunk — Kotlin's location callback calls this ────────
-// Builds {:location, %{lat, lon, accuracy, altitude}} and sends it to the
-// waiting pid. Exported directly (zig emits the Java_ C-ABI symbol).
-export fn Java_io_mob_location_MobLocationBridge_nativeDeliverLocation(jenv: *jni.JNIEnv, cls: jni.JClass, pid_long: jni.JLong, lat: f64, lon: f64, acc: f64, alt: f64) callconv(.c) void {
+// Builds {:location, %{lat, lon, accuracy, altitude, speed, course, time}} and
+// sends it to the waiting pid. speed (m/s) and course (degrees, from Android's
+// bearing) arrive as NaN when the fix has none, and are delivered as nil; time
+// is unix milliseconds. Exported directly (zig emits the Java_ C-ABI symbol).
+export fn Java_io_mob_location_MobLocationBridge_nativeDeliverLocation(jenv: *jni.JNIEnv, cls: jni.JClass, pid_long: jni.JLong, lat: f64, lon: f64, acc: f64, alt: f64, speed: f64, bearing: f64, time: jni.JLong) callconv(.c) void {
     _ = jenv;
     _ = cls;
     var pid = pidFromLong(pid_long);
@@ -115,16 +117,27 @@ export fn Java_io_mob_location_MobLocationBridge_nativeDeliverLocation(jenv: *jn
         erts.atom(env, "lon"),
         erts.atom(env, "accuracy"),
         erts.atom(env, "altitude"),
+        erts.atom(env, "speed"),
+        erts.atom(env, "course"),
+        erts.atom(env, "time"),
     };
     const vals = [_]erts.ERL_NIF_TERM{
         erts.enif_make_double(env, lat),
         erts.enif_make_double(env, lon),
         erts.enif_make_double(env, acc),
         erts.enif_make_double(env, alt),
+        doubleOrNil(env, speed),
+        doubleOrNil(env, bearing),
+        erts.enif_make_int64(env, time),
     };
     const map = erts.makeMap(env, &keys, &vals) orelse return;
     const msg = erts.makeTuple(env, .{ erts.atom(env, "location"), map });
     _ = erts.enif_send(null, &pid, env, msg);
+}
+
+// NaN, the bridge's "none", is nil; enif_make_double refuses NaN anyway.
+inline fn doubleOrNil(env: ?*erts.ErlNifEnv, x: f64) erts.ERL_NIF_TERM {
+    return if (std.math.isNan(x)) erts.atom(env, "nil") else erts.enif_make_double(env, x);
 }
 
 // Error delivery — Kotlin passes a small code instead of a string so no JNI
