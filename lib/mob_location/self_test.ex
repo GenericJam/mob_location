@@ -79,7 +79,9 @@ defmodule MobLocation.SelfTest do
         {:fail, "location_get_once/0 delivered error #{inspect(reason)}, expected :unavailable"}
 
       {:location, other} ->
-        {:fail, "location_get_once/0 delivered #{inspect(other)}, expected %{lat:, lon:}"}
+        {:fail,
+         "location_get_once/0 delivered #{inspect(other)}, expected a fix map " <>
+           "(lat, lon, accuracy, altitude, speed, course, time)"}
     after
       timeout ->
         case platform do

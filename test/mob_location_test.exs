@@ -124,6 +124,23 @@ defmodule MobLocationTest do
       assert {:fail, "fix " <> rest} = SelfTest.await_answer(0, :ios)
       assert rest =~ "time as integer ms"
 
+      send(
+        self(),
+        {:location,
+         %{
+           lat: 45.5,
+           lon: -73.6,
+           accuracy: 10.0,
+           altitude: 30.0,
+           speed: "2.5",
+           course: 271.0,
+           time: 1_794_840_000_000
+         }}
+      )
+
+      assert {:fail, "fix " <> rest} = SelfTest.await_answer(0, :android)
+      assert rest =~ "speed and course as a number or nil"
+
       send(self(), {:location, :error, :unavailable})
       assert SelfTest.await_answer(0, :ios) == :pass
 
