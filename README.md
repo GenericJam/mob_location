@@ -9,7 +9,7 @@ iOS: `CLLocationManager`. Android: `FusedLocationProviderClient`.
 
 ```elixir
 # mix.exs
-{:mob_location, "~> 0.1"}
+{:mob_location, "~> 0.3"}
 
 # mob.exs
 config :mob, :plugins, [:mob_location]
