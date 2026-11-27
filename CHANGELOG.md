@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Speed, course and fix time.** A fix now also carries `speed` (m/s),
+  `course` (degrees from true north) and `time` (unix ms): Android
+  `Location.speed` / `bearing` / `time`, iOS `CLLocation.speed` / `course` /
+  `timestamp`. `speed` and `course` are `nil` when the platform has none
+  (Android `!hasSpeed()` / `!hasBearing()`, iOS a negative value). The change
+  is additive: matches on `lat`, `lon`, `accuracy` and `altitude` still work.
+  The Android bridge's `nativeDeliverLocation` takes three more arguments.
+
 ## [0.2.0] - 2026-10-09
 
 ### Added

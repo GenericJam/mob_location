@@ -16,6 +16,21 @@ defmodule MobLocation do
       handle_info({:location, %{lat: lat, lon: lon, accuracy: acc, altitude: alt}}, socket)
       handle_info({:location, :error, reason}, socket)
 
+  A fix also carries the device's own velocity and time:
+
+    * `speed` — ground speed in m/s, or `nil` when the fix has none (Android
+      `!hasSpeed()`, iOS a negative `speed`);
+    * `course` — direction of travel in degrees from true north, `[0, 360)`,
+      or `nil` when the fix has none (Android `!hasBearing()`, iOS a negative
+      `course`). It is the course over ground, not the device's heading, and is
+      usually `nil` or meaningless when the device is not moving;
+    * `time` — the fix's UTC time, unix milliseconds (Android `Location.time`,
+      iOS `CLLocation.timestamp`).
+
+  These keys are additive: a match on the first four still works.
+
+      %{lat: lat, lon: lon, speed: speed, course: course, time: time}
+
   Common `reason` atoms:
 
     * `:permission_denied` — user denied `:location` (or revoked it mid-session).
