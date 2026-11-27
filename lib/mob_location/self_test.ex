@@ -6,11 +6,15 @@ defmodule MobLocation.SelfTest do
   One native round trip, no UI: `location_get_once/0`, then wait for what
   the native side sends back to the caller.
 
-    * A fix (`{:location, %{lat: _, lon: _}}`) or `{:location, :error,
-      :unavailable}` pass: either proves the NIF is linked, the Kotlin
-      bridge / Objective-C delegate is registered and the delivery path
-      (the `nativeDeliver*` thunks / the delegate) is wired. A fix is a
-      feature, not the proof.
+    * A fix (`{:location, %{lat: _, lon: _, speed: _, course: _, time: _}}`)
+      or `{:location, :error, :unavailable}` pass: either proves the NIF is
+      linked, the Kotlin bridge / Objective-C delegate is registered and the
+      delivery path (the `nativeDeliver*` thunks / the delegate) is wired. A
+      fix is a feature, not the proof.
+    * A fix without `speed`, `course` and `time`, or with one of the wrong
+      type, is a failure: the native side and this module ship in one
+      package, so the old four-key shape means a stale or mismatched native
+      build.
     * `{:error, :bridge_not_registered}` from the NIF (Android: the
       bootstrap never called `MobLocationBridge.register()`, or a method-ID
       lookup failed) and `{:location, :error, :no_activity}` (the bootstrap
@@ -59,8 +63,8 @@ defmodule MobLocation.SelfTest do
   @spec await_answer(non_neg_integer(), :ios | :android) :: Mob.Plugin.SelfTest.result()
   def await_answer(timeout, platform) do
     receive do
-      {:location, %{lat: lat, lon: lon}} when is_float(lat) and is_float(lon) ->
-        :pass
+      {:location, %{lat: lat, lon: lon} = fix} when is_float(lat) and is_float(lon) ->
+        check_fix_shape(fix)
 
       {:location, :error, :unavailable} ->
         :pass
@@ -87,6 +91,24 @@ defmodule MobLocation.SelfTest do
              "location_get_once/0 got no answer in #{div(timeout, 1000)} s: " <>
                "no fix and the provider left the request pending (MOB-403)"}
         end
+    end
+  end
+
+  # speed and course are nil when the platform has none; time is always there.
+  defp check_fix_shape(fix) do
+    cond do
+      not Enum.all?([:speed, :course, :time], &Map.has_key?(fix, &1)) ->
+        {:fail,
+         "fix #{inspect(fix)} has no speed/course/time: the native side predates them " <>
+           "(stale or mismatched native build)"}
+
+      not (is_nil(fix.speed) or is_number(fix.speed)) or
+        not (is_nil(fix.course) or is_number(fix.course)) or not is_integer(fix.time) ->
+        {:fail,
+         "fix #{inspect(fix)}: expected speed and course as a number or nil, time as integer ms"}
+
+      true ->
+        :pass
     end
   end
 end

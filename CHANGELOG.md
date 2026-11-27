@@ -17,6 +17,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
   (Android `!hasSpeed()` / `!hasBearing()`, iOS a negative value). The change
   is additive: matches on `lat`, `lon`, `accuracy` and `altitude` still work.
   The Android bridge's `nativeDeliverLocation` takes three more arguments.
+  `MobLocation.SelfTest` now fails a fix without `speed`, `course` and
+  `time` (or with one of the wrong type): the old shape means a stale native
+  build. Verified on an iPhone SE (3rd generation), standing and walking.
 
 ## [0.2.0] - 2026-10-09
 
