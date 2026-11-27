@@ -27,7 +27,9 @@ socket = MobLocation.get_once(socket)                     # single fix, then sto
 socket = MobLocation.start(socket, accuracy: :balanced)   # continuous updates
 socket = MobLocation.stop(socket)                         # save battery
 
-def handle_info({:location, %{lat: lat, lon: lon, accuracy: acc, altitude: alt}}, socket), do: ...
+# speed (m/s) and course (degrees from true north) are nil when the platform
+# has none; time is the fix's UTC time in unix ms.
+def handle_info({:location, %{lat: lat, lon: lon, accuracy: acc, altitude: alt, speed: speed, course: course, time: time}}, socket), do: ...
 def handle_info({:location, :error, reason}, socket), do: ...
 ```
 

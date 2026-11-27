@@ -1,6 +1,6 @@
 # mob_location — Agent Instructions
 
-You're in **mob_location**, a Mob plugin for device location — GPS + network fixes, one-shot (`get_once`) or continuous (`start` / `stop`). iOS uses `CLLocationManager`; Android uses `FusedLocationProviderClient` via the plugin-owned `io.mob.location.MobLocationBridge` Kotlin bridge. Updates arrive on the caller's process inbox as `{:location, %{lat:, lon:, accuracy:, altitude:}}` or `{:location, :error, reason}`.
+You're in **mob_location**, a Mob plugin for device location — GPS + network fixes, one-shot (`get_once`) or continuous (`start` / `stop`). iOS uses `CLLocationManager`; Android uses `FusedLocationProviderClient` via the plugin-owned `io.mob.location.MobLocationBridge` Kotlin bridge. Updates arrive on the caller's process inbox as `{:location, %{lat:, lon:, accuracy:, altitude:, speed:, course:, time:}}` (`speed`/`course` `nil` when the platform has none, `time` UTC unix ms) or `{:location, :error, reason}`. `MobLocation.SelfTest` fails a fix without `speed`/`course`/`time`: keep it in step when the shape changes.
 
 **Also read [`~/code/mob/AGENTS.md`](../mob/AGENTS.md)** for the system view — mob's three-repo topology, plugin manifest schema, `Mob.Composite` / `Mob.Sigil`, how to drive a running app from your session, and the cross-cutting pre-empt-failure rules. This file is mob_location-specific.
 
